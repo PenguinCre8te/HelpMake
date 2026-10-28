@@ -1,0 +1,109 @@
+name: Build
+
+on:
+  workflow_call:
+    outputs:
+      artifact-name:
+        description: "The name of the built artifact"
+        value: ${{ jobs.build.outputs.artifact_name }}
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    outputs:
+      artifact_name: ${{ matrix.artifact_name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64
+            os: ubuntu-latest
+            compiler: g++
+            output: hm
+            artifact_name: hm-linux-amd64
+
+          - name: Linux ARM64
+            os: ubuntu-24.04-arm
+            compiler: g++
+            output: hm
+            artifact_name: hm-linux-arm64
+
+          - name: macOS
+            os: macos-latest
+            compiler: clang++
+            output: hm
+            artifact_name: hm-macos
+
+          - name: Windows x86_64
+            os: windows-latest
+            output: hm.exe
+            setup_mingw_x64: true
+            artifact_name: hm-windows-amd64.exe
+
+          - name: Windows ARM64
+            os: ubuntu-latest
+            compiler: aarch64-w64-mingw32-g++
+            output: hm.exe
+            install_cross: g++-aarch64-w64-mingw32
+            artifact_name: hm-windows-arm64.exe
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux Cross-Compiler for Windows ARM64
+        if: matrix.install_cross != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.install_cross }}
+
+      - name: Setup MSYS2 for Windows x86_64
+        if: matrix.setup_mingw_x64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-toolchain
+
+      - name: Compile Binary (Standard Bash Platforms)
+        if: matrix.setup_mingw_x64 != true
+        shell: bash
+        run: |
+          ${{ matrix.compiler }} -std=c++20 \
+            src/cli/*.cpp \
+            src/executor/*.cpp \
+            src/fs/*.cpp \
+            src/generator/*.cpp \
+            src/getters/*.cpp \
+            src/init/*.cpp \
+            src/parser/*.cpp \
+            src/process/*.cpp \
+            src/toolchain/*.cpp \
+            src/main.cpp \
+            -o ${{ matrix.output }} \
+            -Iinclude
+
+      - name: Compile Binary (Windows x86_64 via MSYS2)
+        if: matrix.setup_mingw_x64
+        shell: msys2 {0}
+        run: |
+          g++ -std=c++20 \
+            src/cli/*.cpp \
+            src/executor/*.cpp \
+            src/fs/*.cpp \
+            src/generator/*.cpp \
+            src/getters/*.cpp \
+            src/init/*.cpp \
+            src/parser/*.cpp \
+            src/process/*.cpp \
+            src/toolchain/*.cpp \
+            src/main.cpp \
+            -o hm.exe \
+            -Iinclude
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.output }}
