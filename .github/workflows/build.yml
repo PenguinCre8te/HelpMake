@@ -6,6 +6,7 @@ on:
       artifact-name:
         description: "The name of the built artifact"
         value: ${{ jobs.build.outputs.artifact_name }}
+  push:
 
 jobs:
   build:
